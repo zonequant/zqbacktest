@@ -41,9 +41,7 @@ class BacktestEngine:
 
         # 初始化撮合过程中的数据
         data_length = self.data_matrix[0].shape[0]
-        self.positions = np.zeros((data_length, len(self.symbols)))
-        self.trades = np.zeros((data_length, len(self.symbols)))
-        self.equity = np.zeros((data_length,))
+
 
     def run_strategy(self, strategy, initial_capital, commission_rate, slippage_rate):
         # 计算因子
@@ -107,6 +105,34 @@ class BacktestEngine:
         win_loss_ratio = average_win / abs(average_lose)
 
         return [returns,sharpe_ratio,max_drawdown,annualized_return,win_days,lose_days,average_win,average_lose,win_loss_ratio]
+
+    def match_order(self, orders, high, low):
+        # Calculate the value of the current position.
+        position_value = (self.positions * (self.data[-1] - self.data[0]) +
+                          abs(self.positions) * self.data[0])
+
+        # Combine any unfulfilled orders.
+        orders = orders.groupby(["side"]).sum()
+
+        # Loop through all orders.
+        for i, row in orders.iterrows():
+            # If the order is a buy order and the price is above the high price
+            # or if the order is a sell order and the price is below the low
+            # price, the order is executed successfully.
+            if ((row["side"] == "BUY" and row["price"] > high) or
+                    (row["side"] == "SELL" and row["price"] < low)):
+                # Update the average price of the position.
+                self.position_avg_price = (self.position_avg_price * self.positions +
+                                           row["price"] * row["quantity"]) / (self.positions + row["quantity"])
+
+                # Update the number of shares held.
+                self.positions += row["quantity"]
+
+        # Update the available cash.
+        self.cash = position_value - (self.positions * (self.data[-1] - self.position_avg_price) +
+                                      abs(self.positions) * self.position_avg_price)
+
+
 
 
 # def calculate_statistics(self):
